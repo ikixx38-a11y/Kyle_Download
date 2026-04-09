@@ -1,21 +1,17 @@
 import os
 import telebot
 import yt_dlp
-from fastapi import FastAPI
-import uvicorn
+from flask import Flask
 from threading import Thread
 
-# Bot API Token
+# Bot Token ကို Render ရဲ့ Environment Variable မှာ BOT_TOKEN ဆိုပြီး ထည့်ပေးရပါမယ်
 TOKEN = os.getenv('8528856013:AAHGQf6IeVVBhWOOmhIWTedX4UOkHnDZB5g')
 bot = telebot.TeleBot(TOKEN)
-app = FastAPI()
+server = Flask(__name__)
 
-# Render အတွက် Web Endpoint
-@app.get("/")
-def index():
-    return {"status": "Bot is running"}
-
+# --- TikTok Downloader Logic ---
 def download_tiktok(url):
+    # yt-dlp option များ (Watermark ကင်းစင်ပြီး အကောင်းဆုံး Quality ရရန်)
     ydl_opts = {
         'format': 'best',
         'outtmpl': 'video.mp4',
@@ -26,28 +22,34 @@ def download_tiktok(url):
         ydl.download([url])
         return 'video.mp4'
 
+# --- Telegram Bot Commands ---
 @bot.message_handler(commands=['start'])
-def start(message):
-    bot.reply_to(message, "TikTok link ပို့ပေးပါ၊ Watermark မပါဘဲ ဒေါင်းပေးမယ်။")
+def welcome(message):
+    bot.reply_to(message, "👋 မင်္ဂလာပါ။ TikTok Link ပို့ပေးပါ။")
 
 @bot.message_handler(func=lambda m: "tiktok.com" in m.text)
-def handle_msg(message):
-    temp_msg = bot.reply_to(message, "⏳ ခဏစောင့်ပါ...")
+def handle_video(message):
+    status_msg = bot.reply_to(message, "⏳ ဒေါင်းလုဒ်ဆွဲနေပါတယ်...")
     try:
-        file_path = download_tiktok(message.text)
-        with open(file_path, 'rb') as video:
-            bot.send_video(message.chat.id, video)
-        os.remove(file_path)
-        bot.delete_message(message.chat.id, temp_msg.message_id)
+        video_file = download_tiktok(message.text)
+        with open(video_file, 'rb') as v:
+            bot.send_video(message.chat.id, v)
+        os.remove(video_file) # နေရာလွတ်စေရန် ပြန်ဖျက်ခြင်း
+        bot.delete_message(message.chat.id, status_msg.message_id)
     except Exception as e:
-        bot.edit_message_text(f"❌ Error: {str(e)}", message.chat.id, temp_msg.message_id)
+        bot.edit_message_text(f"❌ အမှားအယွင်းရှိပါသည်- {str(e)}", message.chat.id, status_msg.message_id)
+
+# --- Render Web Server (Keep Alive) ---
+@server.route("/")
+def webhook():
+    return "Bot is alive!", 200
 
 def run_bot():
     bot.infinity_polling()
 
 if __name__ == "__main__":
-    # Bot ကို Thread တစ်ခုနဲ့ Run မယ်
+    # Bot ကို Thread တစ်ခုဖြင့် Run ရန်
     Thread(target=run_bot).start()
-    # Web Server ကို Render Port မှာ Run မယ်
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # Render အတွက် Port ဖွင့်ပေးခြင်း
+    port = int(os.environ.get("PORT", 5000))
+    server.run(host="0.0.0.0", port=port)
