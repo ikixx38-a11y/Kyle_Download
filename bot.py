@@ -1,14 +1,20 @@
 import os
 import telebot
 import yt_dlp
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from flask import Flask
 from threading import Thread
 
-# Bot API Token
-TOKEN = os.getenv('8528856013:AAHGQf6IeVVBhWOOmhIWTedX4UOkHnDZB5g')
-bot = telebot.TeleBot(TOKEN)
+# --- ဒီနေရာမှာ သင့် Token ကို အတိအကျ ထည့်ပါ ---
+TOKEN = "8528856013:AAHGQf6IeVVBhWOOmhIWTedX4UOkHnDZB5g" 
+# ဥပမာ - TOKEN = "12345678:AAFdscs..."
 
-# TikTok Downloader Function
+bot = telebot.TeleBot(TOKEN)
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!", 200
+
 def download_tiktok(url):
     ydl_opts = {
         'format': 'best',
@@ -20,37 +26,29 @@ def download_tiktok(url):
         ydl.download([url])
         return 'video.mp4'
 
-# --- Telegram Bot Logic ---
 @bot.message_handler(commands=['start'])
-def start(message):
-    bot.reply_to(message, "TikTok link ပို့ပေးပါ၊ Watermark မပါဘဲ ဒေါင်းပေးမယ်။")
+def welcome(message):
+    bot.reply_to(message, "TikTok link ပို့ပေးပါ၊ ဒေါင်းပေးပါ့မယ်။")
 
-@bot.message_handler(func=lambda m: "tiktok.com" in m.text)
-def handle_msg(message):
-    temp = bot.reply_to(message, "⌛ ခဏစောင့်ပါ...")
+@bot.message_handler(func=lambda m: "tiktok.com" in m.text or "douyin.com" in m.text)
+def handle_tiktok(message):
+    wait = bot.reply_to(message, "⏳ ခဏစောင့်ပါ...")
     try:
-        file_path = download_tiktok(message.text)
-        with open(file_path, 'rb') as video:
-            bot.send_video(message.chat.id, video)
-        os.remove(file_path)
-        bot.delete_message(message.chat.id, temp.message_id)
+        file = download_tiktok(message.text)
+        with open(file, 'rb') as v:
+            bot.send_video(message.chat.id, v)
+        if os.path.exists(file):
+            os.remove(file)
+        bot.delete_message(message.chat.id, wait.message_id)
     except Exception as e:
-        bot.edit_message_text(f"❌ Error: {str(e)}", message.chat.id, temp.message_id)
+        bot.edit_message_text(f"❌ Error: {str(e)}", message.chat.id, wait.message_id)
 
-# --- Render အတွက် Web Server အသေးစားလေး ---
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is Running")
-
-def run_web_server():
-    port = int(os.environ.get("PORT", 8000))
-    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-    server.serve_forever()
+def run_bot():
+    bot.infinity_polling()
 
 if __name__ == "__main__":
-    # Web Server ကို Thread တစ်ခုနဲ့ အရင် Run မယ် (Render အတွက်)
-    Thread(target=run_web_server).start()
-    # Bot ကို Polling လုပ်မယ်
-    bot.infinity_polling()
+    # Bot ကို Thread နှင့် Run ခြင်း
+    Thread(target=run_bot).start()
+    # Render အတွက် Port ချိတ်ခြင်း
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
