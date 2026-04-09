@@ -6,7 +6,7 @@ import uvicorn
 from threading import Thread
 
 # Bot API Token
-TOKEN = os.getenv('BOT_TOKEN')
+TOKEN = os.getenv('8528856013:AAHGQf6IeVVBhWOOmhIWTedX4UOkHnDZB5g')
 bot = telebot.TeleBot(TOKEN)
 app = FastAPI()
 
