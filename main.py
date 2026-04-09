@@ -51,7 +51,7 @@ async def handle_tiktok(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         
                         await update.message.reply_video(
                             video=video_url, 
-                            caption="✅ကျေးဇူးပါ✨ ဒေါင်းလုဒ်ဆွဲပါ",
+                            caption="✅ကျေးဇူး၍✨ ဒေါင်းလုဒ်ဆွဲပါ",
                             reply_markup=reply_markup
                         )
                         await status_msg.delete()
