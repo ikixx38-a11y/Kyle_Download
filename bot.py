@@ -1,17 +1,15 @@
 import os
 import telebot
 import yt_dlp
-from flask import Flask, request
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from threading import Thread
 
-# Bot Setting
+# Bot API Token
 TOKEN = os.getenv('8528856013:AAHGQf6IeVVBhWOOmhIWTedX4UOkHnDZB5g')
-# Render က ပေးတဲ့ URL (ဥပမာ- https://your-app.onrender.com)
-URL = os.getenv('RENDER_EXTERNAL_URL') 
 bot = telebot.TeleBot(TOKEN)
-server = Flask(__name__)
 
 # TikTok Downloader Function
-def download_tiktok(video_url):
+def download_tiktok(url):
     ydl_opts = {
         'format': 'best',
         'outtmpl': 'video.mp4',
@@ -19,39 +17,40 @@ def download_tiktok(video_url):
         'no_warnings': True,
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([video_url])
+        ydl.download([url])
         return 'video.mp4'
 
-# Webhook Route
-@server.route('/' + TOKEN, methods=['POST'])
-def getMessage():
-    json_string = request.get_data().decode('utf-8')
-    update = telebot.types.Update.de_json(json_string)
-    bot.process_new_updates([update])
-    return "!", 200
-
-@server.route("/")
-def webhook():
-    bot.remove_webhook()
-    bot.set_webhook(url=URL + '/' + TOKEN)
-    return "Bot is alive and Webhook is set!", 200
-
-# Bot Commands
+# --- Telegram Bot Logic ---
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, "TikTok Link ပို့ပေးပါ၊ ဒေါင်းပေးပါမယ်။")
+    bot.reply_to(message, "TikTok link ပို့ပေးပါ၊ Watermark မပါဘဲ ဒေါင်းပေးမယ်။")
 
 @bot.message_handler(func=lambda m: "tiktok.com" in m.text)
-def handle_tiktok(message):
-    msg = bot.reply_to(message, "⏳ ခဏစောင့်ပါ...")
+def handle_msg(message):
+    temp = bot.reply_to(message, "⌛ ခဏစောင့်ပါ...")
     try:
-        file = download_tiktok(message.text)
-        with open(file, 'rb') as v:
-            bot.send_video(message.chat.id, v)
-        os.remove(file)
-        bot.delete_message(message.chat.id, msg.message_id)
+        file_path = download_tiktok(message.text)
+        with open(file_path, 'rb') as video:
+            bot.send_video(message.chat.id, video)
+        os.remove(file_path)
+        bot.delete_message(message.chat.id, temp.message_id)
     except Exception as e:
-        bot.edit_message_text(f"❌ Error: ဒေါင်းမရပါ။", message.chat.id, msg.message_id)
+        bot.edit_message_text(f"❌ Error: {str(e)}", message.chat.id, temp.message_id)
+
+# --- Render အတွက် Web Server အသေးစားလေး ---
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is Running")
+
+def run_web_server():
+    port = int(os.environ.get("PORT", 8000))
+    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    server.serve_forever()
 
 if __name__ == "__main__":
-    server.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
+    # Web Server ကို Thread တစ်ခုနဲ့ အရင် Run မယ် (Render အတွက်)
+    Thread(target=run_web_server).start()
+    # Bot ကို Polling လုပ်မယ်
+    bot.infinity_polling()
